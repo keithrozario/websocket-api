@@ -7,6 +7,8 @@ provider:
   websocketsApiRouteSelectionExpression: $request.body.action # custom routes are selected by the value of the action property in the body
   websocketsDescription: Custom Serverless Websockets
   region: ap-southeast-1
+  environment:
+    API_ENDPOINT: ${ssm:apigatewayendpoint}/${opt:stage,'dev'}
 
 functions:
   connectionHandler:
@@ -31,3 +33,22 @@ functions:
           route: foo # will trigger if $request.body.action === "foo"
     layers:
       - arn:aws:lambda:${self:provider.region}:017000801446:layer:AWSLambdaPowertoolsPythonV2:26
+
+resources:
+  Resources:
+    gatewayid:
+      Type: AWS::SSM::Parameter
+      Properties:
+        DataType: text
+        Description: API Gateway Endpoint
+        Name: apigatewayendpoint
+        Type: String
+        Value:
+          Fn::GetAtt:
+            - WebsocketsApi
+            - ApiEndpoint
+
+package:
+  patterns:
+    - '!node_modules/**'
+    - '!venv/**'
