@@ -1,0 +1,33 @@
+service: serverless-ws-test
+
+provider:
+  name: aws
+  runtime: python3.9
+  websocketsApiName: custom-websockets-api-name
+  websocketsApiRouteSelectionExpression: $request.body.action # custom routes are selected by the value of the action property in the body
+  websocketsDescription: Custom Serverless Websockets
+  region: ap-southeast-1
+
+functions:
+  connectionHandler:
+    handler: connect.main
+    events:
+      - websocket:
+          route: $connect
+      - websocket:
+          route: $disconnect
+    layers:
+      - arn:aws:lambda:${self:provider.region}:017000801446:layer:AWSLambdaPowertoolsPythonV2:26
+  defaultHandler:
+    handler: default.main
+    events:
+      - websocket: $default #simple event definition without extra route property
+    layers:
+      - arn:aws:lambda:${self:provider.region}:017000801446:layer:AWSLambdaPowertoolsPythonV2:26
+  customFooHandler:
+    handler: custom_foo.main
+    events:
+      - websocket:
+          route: foo # will trigger if $request.body.action === "foo"
+    layers:
+      - arn:aws:lambda:${self:provider.region}:017000801446:layer:AWSLambdaPowertoolsPythonV2:26
