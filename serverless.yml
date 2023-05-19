@@ -9,6 +9,8 @@ provider:
   region: ap-southeast-1
   environment:
     API_ENDPOINT: ${ssm:apigatewayendpoint}/${opt:stage,'dev'}
+  logs:
+    websocket: true
 
 functions:
   connectionHandler:
@@ -16,6 +18,10 @@ functions:
     events:
       - websocket:
           route: $connect
+          authorizer: 
+            name: auth
+            identitySource:
+              - 'route.request.header.auth'
       - websocket:
           route: $disconnect
     layers:
@@ -33,6 +39,18 @@ functions:
           route: foo # will trigger if $request.body.action === "foo"
     layers:
       - arn:aws:lambda:${self:provider.region}:017000801446:layer:AWSLambdaPowertoolsPythonV2:26
+  apiGatewayHTTPBackend:
+    handler: connect.main
+    events:
+      - httpApi:
+          method: GET
+          path: /
+    layers:
+      - arn:aws:lambda:${self:provider.region}:017000801446:layer:AWSLambdaPowertoolsPythonV2:26
+  auth:
+    handler: auth.main
+    layers:
+      - arn:aws:lambda:${self:provider.region}:017000801446:layer:AWSLambdaPowertoolsPythonV2:26
 
 resources:
   Resources:
@@ -47,6 +65,54 @@ resources:
           Fn::GetAtt:
             - WebsocketsApi
             - ApiEndpoint
+
+    routeintegration:
+      Type: AWS::ApiGatewayV2::Integration
+      Properties: 
+        ApiId: !Ref WebsocketsApi
+        ConnectionType: INTERNET
+        Description: "http integration"
+        IntegrationMethod: GET
+        IntegrationType: HTTP
+        IntegrationUri:
+          Fn::GetAtt:
+            - HttpApi
+            - ApiEndpoint
+        RequestParameters:
+          "integration.request.header.test": "context.authorizer.key"
+          "integration.request.header.auth": "context.authorizer.number"
+
+    route:
+      Type: AWS::ApiGatewayV2::Route
+      Properties:
+        ApiId: !Ref WebsocketsApi
+        RouteKey: 'bar'
+        Target: !Join
+          - /
+          - - integrations
+            - !Ref routeintegration
+
+    CloudWatchRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            Action: 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+        Path: /
+        ManagedPolicyArns:
+          - 'arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs'
+    
+    Account:
+      Type: 'AWS::ApiGateway::Account'
+      Properties:
+        CloudWatchRoleArn: !GetAtt 
+          - CloudWatchRole
+          - Arn
+
 
 package:
   patterns:
