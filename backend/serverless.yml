@@ -7,13 +7,14 @@ provider:
   websocketsApiRouteSelectionExpression: $request.body.action # custom routes are selected by the value of the action property in the body
   websocketsDescription: Custom Serverless Websockets
   region: ap-southeast-1
-  environment:
-    API_ENDPOINT: ${ssm:apigatewayendpoint}/${opt:stage,'dev'}
   logs:
     websocket: true
+  layers:
+  - arn:aws:lambda:${self:provider.region}:017000801446:layer:AWSLambdaPowertoolsPythonV2:26
+
 
 functions:
-  connectionHandler:
+  connect:
     handler: connect.main
     events:
       - websocket:
@@ -22,35 +23,32 @@ functions:
             name: auth
             identitySource:
               - 'route.request.header.auth'
+          routeResponseSelectionExpression: $default #This option allows you to respond to a websocket message using the body parameter
       - websocket:
           route: $disconnect
-    layers:
-      - arn:aws:lambda:${self:provider.region}:017000801446:layer:AWSLambdaPowertoolsPythonV2:26
-  defaultHandler:
+  default:
     handler: default.main
     events:
-      - websocket: $default #simple event definition without extra route property
+      - websocket:
+          route: $default
+          routeResponseSelectionExpression: $default #This option allows you to respond to a websocket message using the body parameter
     layers:
       - arn:aws:lambda:${self:provider.region}:017000801446:layer:AWSLambdaPowertoolsPythonV2:26
-  customFooHandler:
+  customFoo:
     handler: custom_foo.main
     events:
       - websocket:
           route: foo # will trigger if $request.body.action === "foo"
-    layers:
-      - arn:aws:lambda:${self:provider.region}:017000801446:layer:AWSLambdaPowertoolsPythonV2:26
-  apiGatewayHTTPBackend:
+          routeResponseSelectionExpression: $default
+  auth:
+    handler: auth.main
+
+  apiGatewayHTTPBackendRoute:
     handler: connect.main
     events:
       - httpApi:
           method: GET
-          path: /
-    layers:
-      - arn:aws:lambda:${self:provider.region}:017000801446:layer:AWSLambdaPowertoolsPythonV2:26
-  auth:
-    handler: auth.main
-    layers:
-      - arn:aws:lambda:${self:provider.region}:017000801446:layer:AWSLambdaPowertoolsPythonV2:26
+          path: /{routeKey}
 
 resources:
   Resources:
@@ -75,18 +73,31 @@ resources:
         IntegrationMethod: GET
         IntegrationType: HTTP
         IntegrationUri:
-          Fn::GetAtt:
-            - HttpApi
-            - ApiEndpoint
+          Fn::Join:
+          - ''
+          - - Fn::GetAtt:
+              - HttpApi
+              - ApiEndpoint
+            - /{routeKey}
         RequestParameters:
-          "integration.request.header.test": "context.authorizer.key"
-          "integration.request.header.auth": "context.authorizer.number"
+          "integration.request.header.auth": "context.authorizer.key"
+          "integration.request.path.routeKey": "context.routeKey"
 
-    route:
+    barRoute:
       Type: AWS::ApiGatewayV2::Route
       Properties:
         ApiId: !Ref WebsocketsApi
         RouteKey: 'bar'
+        Target: !Join
+          - /
+          - - integrations
+            - !Ref routeintegration
+
+    apiRoute:
+      Type: AWS::ApiGatewayV2::Route
+      Properties:
+        ApiId: !Ref WebsocketsApi
+        RouteKey: 'api'
         Target: !Join
           - /
           - - integrations

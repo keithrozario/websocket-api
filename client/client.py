@@ -1,7 +1,7 @@
 from websocket import create_connection
 import time
 
-ws_server = "wss://1xpovj0mt8.execute-api.ap-southeast-1.amazonaws.com/dev"
+ws_server = "wss://8t6cg05ji4.execute-api.ap-southeast-1.amazonaws.com/dev"
 
 def on_pong(wsapp, message):
     print("Got a pong! Still Connected")
@@ -15,6 +15,8 @@ print(ws.recv())
 
 # test with endpoint, should return "barbarbar"
 ws.send('{"action":"bar"}')
+ws.send('{"action":"api"}')
+ws.send('{"action":"test"}')
 ws.close()
 
 
